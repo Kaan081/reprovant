@@ -27,8 +27,7 @@ def _load_helpers():
     return module
 
 
-@pytest.fixture(scope="module")
-def observed():
+def _exercise_live():
     """One real enqueue + manual repeat; no Reprovant report/evaluator calls."""
     probe = _load_helpers()
     probe.assert_disposable()
@@ -105,6 +104,13 @@ def observed():
         return result
     finally:
         pubsub.close()
+
+
+@pytest.fixture(scope="module")
+def observed(django_db_blocker):
+    """Temporarily permit ORM access only to the pre-migrated disposable CI DB."""
+    with django_db_blocker.unblock():
+        return _exercise_live()
 
 
 def test_terminal_state_preserved(observed):

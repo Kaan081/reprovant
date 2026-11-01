@@ -1,6 +1,7 @@
 """Pure unit tests: NOT live PostgreSQL/Celery/Redis evidence."""
 from __future__ import annotations
 
+from contextlib import contextmanager
 import importlib.util
 import io
 from pathlib import Path
@@ -21,6 +22,7 @@ def import_path(name, path):
 
 baseline = import_path("pytest_baseline_04c", ROOT / "experiments/eventflow_pytest_baseline/classify.py")
 comparison = import_path("pytest_compare_04c", ROOT / "experiments/eventflow_pytest_baseline/compare.py")
+live = import_path("pytest_live_fixture_04c", ROOT / "experiments/eventflow_pytest_baseline/test_live.py")
 
 
 def junit(state_failure=False, event_failure=False, *, extra=False, error=False, skipped=False, bogus=False):
@@ -146,3 +148,25 @@ def test_same_status_but_wrong_source_is_not_parity():
     r = reports()
     r[("upstream", "reprovant")]["source_pin"] = "wrong"
     assert comparison.compare(r)["status"] == "INCONCLUSIVE"
+
+
+def test_live_fixture_unblocks_db_only_around_disposable_exercise(monkeypatch):
+    """Regression for CI: pytest-django blocks ORM by default."""
+    events = []
+
+    class FakeBlocker:
+        @contextmanager
+        def unblock(self):
+            events.append("unblock")
+            try:
+                yield
+            finally:
+                events.append("restore")
+
+    def fake_exercise():
+        events.append("exercise")
+        return {"finished": True}
+
+    monkeypatch.setattr(live, "_exercise_live", fake_exercise)
+    assert live.observed.__wrapped__(FakeBlocker()) == {"finished": True}
+    assert events == ["unblock", "exercise", "restore"]
