@@ -6,7 +6,7 @@
 
 - [ ] Check the proposed **Reprovant** name for GitHub, PyPI, trademarks and domains; availability not guaranteed by preliminary search.
 - [ ] Keep Python `pipeline_acceptance` import and package entry points unchanged. Repository rename is cosmetic, not a package migration.
-- [ ] Decide whether to add a license for original code (there is no root LICENSE in the archived v0.2.1 snapshot); do not assume permission to distribute third-party source.
+- [ ] Decide whether to add a repository-wide license for author-owned code (none is granted by default); independently preserve the Eventflow MIT attribution for the modified `tasks_guarded.py` sample.
 - [ ] Ensure README lists the verified 02A / 03A / 03B results and their scope limitations.
 
 ## Security & privacy
@@ -14,7 +14,7 @@
 - [ ] On the **actual current local Git clone**, fetch all refs and scan **entire reachable Git history**, not only HEAD, for secrets (`gitleaks git . --log-opts=--all --redact` or equivalent). Rotate credentials if ever committed; removal from HEAD alone does not remove history.
 - [ ] Inspect all tracked and historical filenames for `.env`, credentials, dumps, local evidence, logs, private keys, `.zip` and customer data.
 - [ ] Review GitHub Actions **all previous runs, uploaded artifacts, workflow/job logs**, branch/tag history, and PR comments for sensitive data. On private→public, GitHub says prior Actions history/logs become visible to everyone.
-- [ ] Review collaborator permissions, branch protection, package/release assets, GitHub Pages, readmes/linked URLs, third-party license conditions, and repo rulesets. Any removed push rulesets must be reconsidered after visibility change.
+- [ ] Review collaborator permissions, branch protection, package/release assets, GitHub Pages, readmes/linked URLs, third-party license conditions, and repo rulesets. Confirm `docs/THIRD_PARTY_NOTICES.md` matches the pinned upstream Eventflow LICENSE. Any removed push rulesets must be reconsidered after visibility change.
 - [ ] Check no claims imply production certification, automatic diagnosis, commercial customers, or ACK-loss proof.
 
 ## Release order (only AFTER every gate is independently approved)
