@@ -23,6 +23,8 @@ jobs:
         run: python -m pytest -q
       - name: Generate synthetic evidence
         run: python -m pipeline_acceptance.demo --output proof-report.json
+      - name: Test actual worker process termination (SQLite)
+        run: python -m pipeline_acceptance.crash_harness --output crash-proof-report.json
       - name: Validate report status
         shell: python
         run: |
@@ -63,6 +65,8 @@ jobs:
         run: python -m pytest -q
       - name: Generate synthetic PostgreSQL evidence
         run: python -m pipeline_acceptance.demo --postgres --output proof-report.json
+      - name: Test actual worker process termination (PostgreSQL)
+        run: python -m pipeline_acceptance.crash_harness --postgres --output crash-proof-report.json
       - name: Validate PostgreSQL report status
         shell: python
         run: |

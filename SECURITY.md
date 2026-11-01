@@ -25,3 +25,15 @@ External authz and human consent; sandbox provisioning; privilege-separated DB r
 4. Start Docker Compose only after confirming bound port 54329 is unused.
 5. Set `PIPELINE_TEST_DSN` in the **current** process; remove it after testing.
 6. Review the resulting evidence; do not share third-party data or connection details.
+
+## Process termination test harness
+
+`crash_harness` runs only against a temporary SQLite DB or the restricted
+loopback PostgreSQL `acceptance` database and a generated isolated schema.
+The test parent creates a child and kills only that PID. The worker's `--child-stage`
+interface requires opt-in environment settings and must not be exposed as a public
+or production repair interface. Worker output is suppressed to avoid exposing
+credentials in CI failures; unexpected exits/timeouts fail closed as inconclusive.
+PostgreSQL credentials remain in the environment (visible to sufficiently privileged
+local administrators), never passed in command-line arguments or JSON results.
+Only synthetic data is supported.
