@@ -19,6 +19,15 @@ UPSTREAM_SHA = "c08455d626d5e1c316d932c4da0652086fb1b19e"
 UPSTREAM_REPO = "juneja-varun/eventflow"
 
 
+def read_upstream_revision() -> str:
+    """Read the pinned external checkout, never our experiment repo HEAD."""
+    upstream_dir = Path(__file__).resolve().parents[2] / "upstream-eventflow"
+    return subprocess.check_output(
+        ["git", "-C", str(upstream_dir), "rev-parse", "HEAD"],
+        text=True,
+    ).strip()
+
+
 def classify(observation: dict) -> tuple[str, str]:
     """Pure fail-closed oracle, independently testable without Django/Celery."""
     if not observation.get("worker_seen") or observation.get("eager_mode") is not False:
@@ -79,7 +88,7 @@ def gather_events(pubsub, order_id: int, seconds: float) -> list[dict]:
 
 def exercise(observation: dict) -> None:
     assert_disposable()
-    upstream_revision = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    upstream_revision = read_upstream_revision()
     observation["upstream_revision"] = upstream_revision
     if upstream_revision != UPSTREAM_SHA:
         raise RuntimeError("Refusing non-pinned upstream revision")

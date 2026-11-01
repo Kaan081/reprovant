@@ -53,3 +53,20 @@ def test_partial_violation_is_inconclusive():
     o = control()
     o["confirmed_events_total"] = 1
     assert probe.classify(o)[0] == "INCONCLUSIVE"
+
+
+def test_pinned_revision_reads_external_checkout_not_our_head(monkeypatch, tmp_path):
+    """Regression: workflow runs the probe from our repo root, not upstream."""
+    monkeypatch.chdir(tmp_path)
+    seen = {}
+
+    def fake_check_output(argv, *, text):
+        seen["argv"] = argv
+        assert text is True
+        return probe.UPSTREAM_SHA + "\n"
+
+    monkeypatch.setattr(probe.subprocess, "check_output", fake_check_output)
+    assert probe.read_upstream_revision() == probe.UPSTREAM_SHA
+    assert seen["argv"][0:2] == ["git", "-C"]
+    assert Path(seen["argv"][2]) == Path(probe.__file__).resolve().parents[2] / "upstream-eventflow"
+    assert seen["argv"][3:] == ["rev-parse", "HEAD"]
