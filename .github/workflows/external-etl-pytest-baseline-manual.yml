@@ -1,0 +1,134 @@
+name: External ETL pytest baseline (manual experiment)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-etl-pytest:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ppa_etl_bench02
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-baseline-ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ppa_etl_bench02"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      POSTGRES_DB: ppa_etl_bench02
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: disposable-baseline-ci
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      PPA_BENCHMARK_DISPOSABLE: 'YES'
+      EXPECTED_ETL_SHA: 28a65c42a9bdbcc6d2ed08038311ae22e9d66d11
+      API_URL: https://invalid.example.invalid/not-used
+    steps:
+      - name: Checkout benchmark definitions
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout immutable upstream ETL source
+        uses: actions/checkout@v4
+        with:
+          repository: timur-rimsky/api-airflow-postgres-etl-pipeline
+          ref: 28a65c42a9bdbcc6d2ed08038311ae22e9d66d11
+          path: upstream-etl
+          persist-credentials: false
+
+      - name: Pin and record upstream revision
+        run: |
+          set -euo pipefail
+          test "$(git -C upstream-etl rev-parse HEAD)" = "$EXPECTED_ETL_SHA"
+          mkdir -p baseline-evidence
+          printf 'upstream_repo=timur-rimsky/api-airflow-postgres-etl-pipeline\nupstream_sha=%s\nmethod=pytest-only\nsource_modified=no\n' "$EXPECTED_ETL_SHA" > baseline-evidence/provenance.txt
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install upstream baseline dependencies
+        run: python -m pip install -r upstream-etl/requirements.txt
+
+      - name: Create disposable upstream schema
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          import psycopg2
+          assert os.environ['POSTGRES_DB'] == 'ppa_etl_bench02'
+          config = dict(dbname=os.environ['POSTGRES_DB'], user=os.environ['POSTGRES_USER'],
+                        password=os.environ['POSTGRES_PASSWORD'], host=os.environ['POSTGRES_HOST'],
+                        port=os.environ['POSTGRES_PORT'])
+          with psycopg2.connect(**config) as conn:
+              with conn.cursor() as cur:
+                  cur.execute(Path('upstream-etl/sql/001_create_tables.sql').read_text())
+                  cur.execute(Path('upstream-etl/sql/002_create_indexes.sql').read_text())
+          print('DISPOSABLE_POSTGRES_SCHEMA_READY')
+          PY
+
+      - name: Run only external pytest baseline
+        id: baseline
+        shell: bash
+        run: |
+          set +e
+          cd upstream-etl
+          python -m pytest -q -c pytest.ini \
+            "$GITHUB_WORKSPACE/experiments/etl_baseline/test_contract.py" \
+            --junitxml="$GITHUB_WORKSPACE/baseline-evidence/junit.xml" \
+            > "$GITHUB_WORKSPACE/baseline-evidence/pytest.txt" 2>&1
+          code=$?
+          cat "$GITHUB_WORKSPACE/baseline-evidence/pytest.txt"
+          echo "pytest_exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Classify evidence without false PASS
+        id: gate
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          python experiments/etl_baseline/classify_junit.py \
+            --junit baseline-evidence/junit.xml \
+            --pytest-exit "${{ steps.baseline.outputs.pytest_exit || 'NOT_RUN' }}" \
+            --revision "${EXPECTED_ETL_SHA:-unknown}" \
+            --output baseline-evidence/report.json
+          code=$?
+          echo "gate_exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Record baseline outcome and artifact presence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p baseline-evidence
+          printf 'pytest_exit=%s\n' "${{ steps.baseline.outputs.pytest_exit || 'NOT_RUN' }}" > baseline-evidence/outcome.txt
+          if test ! -f baseline-evidence/junit.xml; then
+            printf 'NO_JUNIT: infrastructure/setup failure; do NOT claim contract PASS/FAIL\n' >> baseline-evidence/outcome.txt
+          fi
+
+      - name: Upload baseline evidence even when red
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-etl-pytest-baseline-evidence
+          path: baseline-evidence/
+          if-no-files-found: error
+
+      - name: Enforce baseline test result
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.gate.outputs.gate_exit || '2' }}" = '0'
