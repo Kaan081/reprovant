@@ -1,0 +1,161 @@
+name: External Flask job portability 05A (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        method: [pytest, reprovant]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ppa_portability_05a
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: 05a-disposable-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ppa_portability_05a"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      PPA_PORTABILITY_DISPOSABLE: 'YES'
+      DATABASE_URL: postgresql+psycopg2://postgres:05a-disposable-only@127.0.0.1:5432/ppa_portability_05a
+      REDIS_URL: redis://127.0.0.1:6379/14
+      EXPECTED_EXTERNAL_SHA: 509eda4df11d0a79b314494104a7e60aa176f693
+      PORTABILITY_05A_SNAPSHOT: evidence-05a/snapshot.json
+    steps:
+      - name: Checkout Reprovant
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout pinned independent Flask application
+        uses: actions/checkout@v4
+        with:
+          repository: soymattheus/Study---API-for-asynchronous-processing
+          ref: 509eda4df11d0a79b314494104a7e60aa176f693
+          path: external-queue-app
+          persist-credentials: false
+      - name: Enforce unmodified source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-05a
+          test "$(git -C external-queue-app rev-parse HEAD)" = "$EXPECTED_EXTERNAL_SHA"
+          test -z "$(git -C external-queue-app status --porcelain)"
+          printf 'method=%s\nupstream=%s\nmanual_second_dispatch=yes\n' \
+            '${{ matrix.method }}' "$EXPECTED_EXTERNAL_SHA" > evidence-05a/provenance.txt
+          sha256sum external-queue-app/src/python_queues/app/workers/tasks.py > evidence-05a/task.sha256
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install both applications and tests
+        run: |
+          python -m pip install -e './external-queue-app'
+          python -m pip install -e '.[test]'
+      - name: Create tables in disposable PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from python_queues.app import create_app
+          from python_queues.app.extensions import db
+          from python_queues.app.models.job import Job
+          app = create_app()
+          with app.app_context():
+              db.create_all()
+          PY
+      - name: Start actual Celery worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          nohup celery -A python_queues.app.workers.tasks worker \
+            --pool=solo --concurrency=1 --loglevel=INFO </dev/null > evidence-05a/worker.log 2>&1 &
+          echo "$!" > evidence-05a/worker.pid
+      - name: Execute selected method
+        id: acceptance
+        shell: bash
+        run: |
+          set +e
+          if [ '${{ matrix.method }}' = 'pytest' ]; then
+            python -m pytest -q experiments/portability_05a/test_live.py \
+              --junitxml=evidence-05a/junit.xml > evidence-05a/pytest.log 2>&1
+            pytest_code=$?
+            printf 'pytest_exit=%s\n' "$pytest_code" > evidence-05a/test-exit.txt
+            python -m experiments.portability_05a.execute --method pytest \
+              --junit evidence-05a/junit.xml --snapshot evidence-05a/snapshot.json \
+              --pytest-exit "$pytest_code" --output evidence-05a/report.json
+            code=$?
+          else
+            python -m experiments.portability_05a.execute --method reprovant \
+              --output evidence-05a/report.json
+            code=$?
+          fi
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Record outcome
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p evidence-05a
+          printf 'method=%s\nexit=%s\n' '${{ matrix.method }}' \
+            '${{ steps.acceptance.outputs.exit || 'NOT_RUN' }}' > evidence-05a/outcome.txt
+      - name: Upload evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portability-05a-${{ matrix.method }}
+          path: evidence-05a/
+          if-no-files-found: error
+      - name: Fail closed
+        if: always()
+        run: test '${{ steps.acceptance.outputs.exit || '2' }}' = '0'
+
+  compare:
+    if: always()
+    needs: verify
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Download both evidence artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: portability-05a-*
+          path: evidence-comparison
+      - name: Enforce independent parity result
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m experiments.portability_05a.compare \
+            --evidence-dir evidence-comparison --output parity-05a.json
+      - name: Upload comparison
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: portability-05a-verdict
+          path: parity-05a.json
+          if-no-files-found: warn
