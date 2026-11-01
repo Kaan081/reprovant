@@ -30,3 +30,43 @@ jobs:
           from pathlib import Path
           report = json.loads(Path("proof-report.json").read_text(encoding="utf-8"))
           assert report["pass"] and report["backend"] == "sqlite"
+
+  postgres:
+    name: PostgreSQL 17 integration (Python 3.13)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: acceptance
+          POSTGRES_PASSWORD: ci-disposable-test-only
+          POSTGRES_DB: acceptance
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U acceptance -d acceptance"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      # Disposable GitHub-hosted runner, synthetic data only. Never reuse in production.
+      PIPELINE_TEST_DSN: postgresql+psycopg://acceptance:ci-disposable-test-only@127.0.0.1:54329/acceptance
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Install editable and PostgreSQL test dependencies
+        run: python -m pip install -e ".[test,postgres]"
+      - name: Verify disposable PostgreSQL integration and concurrency tests
+        run: python -m pytest -q
+      - name: Generate synthetic PostgreSQL evidence
+        run: python -m pipeline_acceptance.demo --postgres --output proof-report.json
+      - name: Validate PostgreSQL report status
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+          report = json.loads(Path("proof-report.json").read_text(encoding="utf-8"))
+          assert report["pass"] and report["backend"] == "postgresql"
