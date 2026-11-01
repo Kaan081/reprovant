@@ -1,0 +1,149 @@
+name: External Eventflow replay contract 04B (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  replay-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [upstream, guarded]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ppa_eventflow_worker_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-eventflow-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ppa_eventflow_worker_ci"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      POSTGRES_DB: ppa_eventflow_worker_ci
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: disposable-eventflow-only
+      REDIS_URL: redis://127.0.0.1:6379/14
+      DJANGO_SECRET_KEY: disposable-eventflow-04b
+      DJANGO_DEBUG: 'False'
+      DJANGO_SETTINGS_MODULE: config.settings
+      CELERY_TASK_ALWAYS_EAGER: 'False'
+      EVENTFLOW_PROBE_DISPOSABLE: 'YES'
+      EXPECTED_EVENTFLOW_SHA: c08455d626d5e1c316d932c4da0652086fb1b19e
+    steps:
+      - name: Checkout Reprovant
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned educational Eventflow
+        uses: actions/checkout@v4
+        with:
+          repository: juneja-varun/eventflow
+          ref: c08455d626d5e1c316d932c4da0652086fb1b19e
+          path: upstream-eventflow
+          persist-credentials: false
+
+      - name: Verify upstream and optional guarded sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p replay-04b-evidence
+          test "$(git -C upstream-eventflow rev-parse HEAD)" = "$EXPECTED_EVENTFLOW_SHA"
+          test -z "$(git -C upstream-eventflow status --porcelain)"
+          if [ "${{ matrix.mode }}" = 'guarded' ]; then
+            cp experiments/eventflow_guarded/tasks_guarded.py upstream-eventflow/orders/tasks.py
+            python -m py_compile upstream-eventflow/orders/tasks.py
+          fi
+          git -C upstream-eventflow diff --check
+          git -C upstream-eventflow diff --name-only > replay-04b-evidence/changed_files.txt
+          if [ "${{ matrix.mode }}" = 'guarded' ]; then
+            test "$(cat replay-04b-evidence/changed_files.txt)" = 'orders/tasks.py'
+          else
+            test ! -s replay-04b-evidence/changed_files.txt
+          fi
+          sha256sum upstream-eventflow/orders/tasks.py > replay-04b-evidence/task_source.sha256
+          printf 'experiment=04b\nmode=%s\nupstream_sha=%s\nmanual_dispatch=yes\n' '${{ matrix.mode }}' "$EXPECTED_EVENTFLOW_SHA" > replay-04b-evidence/provenance.txt
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install pinned app and local verifier dependencies
+        run: |
+          python -m pip install -r upstream-eventflow/requirements-dev.txt
+          python -m pip install -e '.[test]'
+
+      - name: Migrate disposable database
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream-eventflow
+          python manage.py migrate --noinput
+
+      - name: Start separate Celery worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream-eventflow
+          nohup celery -A config worker --pool=solo --concurrency=1 --loglevel=INFO </dev/null > ../replay-04b-evidence/worker.log 2>&1 &
+          echo "$!" > ../replay-04b-evidence/worker.pid
+
+      - name: Run contract with real worker and assert correct control
+        id: run_contract
+        shell: bash
+        run: |
+          set +e
+          export PYTHONPATH="$GITHUB_WORKSPACE/upstream-eventflow"
+          python experiments/eventflow_replay_contract/run_contract.py \
+            --mode '${{ matrix.mode }}' \
+            --changed-files replay-04b-evidence/changed_files.txt \
+            --output replay-04b-evidence/report.json
+          code=$?
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Record worker process and result status
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p replay-04b-evidence
+          printf 'mode=%s\ncontract_exit=%s\n' '${{ matrix.mode }}' "${{ steps.run_contract.outputs.exit || 'NOT_RUN' }}" > replay-04b-evidence/outcome.txt
+          if test -f replay-04b-evidence/worker.pid; then
+            ps -p "$(cat replay-04b-evidence/worker.pid)" -o pid=,args= >> replay-04b-evidence/outcome.txt || true
+          fi
+
+      - name: Upload evidence including failures
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eventflow-replay-contract-04b-${{ matrix.mode }}
+          path: replay-04b-evidence/
+          if-no-files-found: error
+
+      - name: Enforce fail-closed result
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.run_contract.outputs.exit || '2' }}" = '0'
