@@ -1,0 +1,40 @@
+{
+  "experiment": "python-pipeline-acceptance",
+  "timestamp_utc": "2026-11-01T10:00:10.752440+00:00",
+  "backend": "sqlite",
+  "evidence_scope": "isolated synthetic demonstration; not a customer application; no benchmark/ROI proof",
+  "pass": true,
+  "scenarios": [
+    {
+      "id": "commit_before_ack_then_replay",
+      "invariant": "one durable effect per logical key",
+      "legacy_observed": 2,
+      "guarded_observed": 1,
+      "legacy_violates": true,
+      "guarded_passes": true
+    },
+    {
+      "id": "stale_running_after_success",
+      "invariant": "terminal status must not regress",
+      "legacy_observed": "RUNNING",
+      "guarded_observed": "SUCCEEDED",
+      "guarded_stale_transition_accepted": false,
+      "legacy_violates": true,
+      "guarded_passes": true
+    },
+    {
+      "id": "invalid_candidate_cannot_replace_good_data",
+      "invariant": "validation failure preserves accepted data",
+      "legacy_observed": {
+        "value": "invalid-data",
+        "revision": 2
+      },
+      "guarded_observed": {
+        "value": "good-v1",
+        "revision": 1
+      },
+      "legacy_violates": true,
+      "guarded_passes": true
+    }
+  ]
+}

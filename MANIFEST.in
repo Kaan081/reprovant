@@ -1,0 +1,10 @@
+include README.md SECURITY.md
+recursive-include src *.py
+recursive-include docs *.md
+recursive-exclude . *.env *.env.* .env .env.* *.pem *.key *.p12 *.pfx *.dump *.log *.db *.sqlite *.sqlite3 *.sqlite-* *-report.json proof-report.json
+prune .github
+prune .venv
+prune .pytest_cache
+prune __pycache__
+prune build
+prune dist
