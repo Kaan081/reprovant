@@ -103,3 +103,33 @@ Do **not** pitch this as a proven product. Next independent evidence required:
 3. Obtain one authorized sandbox evaluation and, ideally, a funded narrow pilot.
 
 If the work is bespoke, sell a bounded engineering service instead of an imagined reusable platform.
+
+## Real worker process termination: isolated acceptance experiment
+
+The previous `demo.py` uses a synthetic exception. The new `crash_harness.py`
+starts a **separate Python process** and has the parent **kill that child** at a
+checkpoint. The parent independently queries the disposable database **after**
+termination, then replays the job. The known-broken legacy implementation is also run as a **negative control** in pytest: it MUST fail the post-commit replay invariant (2 effects, not 1). The two checkpoints are:
+
+- **Before commit:** an uncommitted insert + status update must roll back; replay creates exactly one effect.
+- **After commit, before any ACK:** one durable effect survives; replay does not duplicate it.
+
+Run locally without Docker:
+
+```powershell
+.\.venv\Scripts\python -m pipeline_acceptance.crash_harness --output crash-proof-report.json
+.\.venv\Scripts\python -m pytest -q
+```
+
+With an explicitly configured disposable PostgreSQL test service:
+
+```powershell
+.\.venv\Scripts\python -m pipeline_acceptance.crash_harness --postgres --output crash-proof-report.json
+```
+
+Security/limits: parent kills **only the child it created**, uses temp-file markers
+for deterministic checkpoints, never puts PostgreSQL DSNs/passwords in CLI args,
+and checks results via a new DB connection. This is NOT a generic fault-injection
+framework, crash-during-COMMIT test, queue ACK implementation, external-payment
+exactly-once guarantee, cross-platform production guarantee, or proven advantage
+over pytest/AI agents. PostgreSQL integration must pass in CI before claiming it.
