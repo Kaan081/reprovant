@@ -1,0 +1,151 @@
+name: External Eventflow guarded GREEN (manual experiment)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  guarded-green:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ppa_eventflow_worker_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-eventflow-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ppa_eventflow_worker_ci"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      POSTGRES_DB: ppa_eventflow_worker_ci
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: disposable-eventflow-only
+      REDIS_URL: redis://127.0.0.1:6379/14
+      DJANGO_SECRET_KEY: disposable-eventflow-03b
+      DJANGO_DEBUG: 'False'
+      DJANGO_SETTINGS_MODULE: config.settings
+      CELERY_TASK_ALWAYS_EAGER: 'False'
+      EVENTFLOW_PROBE_DISPOSABLE: 'YES'
+      EXPECTED_EVENTFLOW_SHA: c08455d626d5e1c316d932c4da0652086fb1b19e
+    steps:
+      - name: Checkout experiment definition
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned external Eventflow demo
+        uses: actions/checkout@v4
+        with:
+          repository: juneja-varun/eventflow
+          ref: c08455d626d5e1c316d932c4da0652086fb1b19e
+          path: upstream-eventflow
+          persist-credentials: false
+
+      - name: Verify pin and apply MINIMAL TEST-ONLY guard to disposable checkout
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p guarded-evidence
+          test "$(git -C upstream-eventflow rev-parse HEAD)" = "$EXPECTED_EVENTFLOW_SHA"
+          test -z "$(git -C upstream-eventflow status --porcelain)"
+          sha256sum experiments/eventflow_guarded/tasks_guarded.py > guarded-evidence/candidate_source.sha256
+          cp experiments/eventflow_guarded/tasks_guarded.py upstream-eventflow/orders/tasks.py
+          python -m py_compile upstream-eventflow/orders/tasks.py
+          git -C upstream-eventflow diff --check
+          git -C upstream-eventflow diff --name-only > guarded-evidence/changed_files.txt
+          git -C upstream-eventflow diff -- orders/tasks.py > guarded-evidence/guarded_tasks.diff
+          test "$(cat guarded-evidence/changed_files.txt)" = "orders/tasks.py"
+          git -C upstream-eventflow show HEAD:orders/tasks.py | sha256sum > guarded-evidence/original_tasks.sha256
+          sha256sum upstream-eventflow/orders/tasks.py > guarded-evidence/patched_tasks.sha256
+          printf 'upstream_sha=%s\nmode=manual_second_dispatch\nsource_patch=test_only_disposable_checkout\noriginal_03a_run=41318068548\n' "$EXPECTED_EVENTFLOW_SHA" > guarded-evidence/provenance.txt
+
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install upstream dependencies
+        run: python -m pip install -r upstream-eventflow/requirements-dev.txt
+
+      - name: Prepare disposable PostgreSQL schema
+        run: |
+          set -euo pipefail
+          cd upstream-eventflow
+          python manage.py migrate --noinput
+
+      - name: Start patched independent Celery worker (not eager)
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream-eventflow
+          nohup celery -A config worker --pool=solo --concurrency=1 --loglevel=INFO </dev/null > ../guarded-evidence/worker.log 2>&1 &
+          echo "$!" > ../guarded-evidence/worker.pid
+
+      - name: Run exact 03A real-broker probe against patched disposable checkout
+        id: probe
+        shell: bash
+        run: |
+          set +e
+          export PYTHONPATH="$GITHUB_WORKSPACE/upstream-eventflow"
+          python experiments/eventflow_worker_probe/run_probe.py --output guarded-evidence/probe.json
+          code=$?
+          echo "probe_exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Independently classify guarded outcome
+        id: classifier
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          python experiments/eventflow_guarded/classify_guarded.py \
+            --probe-json guarded-evidence/probe.json \
+            --probe-exit "${{ steps.probe.outputs.probe_exit || 'NOT_RUN' }}" \
+            --changed-files guarded-evidence/changed_files.txt \
+            --output guarded-evidence/report.json
+          code=$?
+          echo "classifier_exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Capture worker state and report provenance
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p guarded-evidence
+          printf 'probe_exit=%s\nclassifier_exit=%s\n' "${{ steps.probe.outputs.probe_exit || 'NOT_RUN' }}" "${{ steps.classifier.outputs.classifier_exit || 'NOT_RUN' }}" > guarded-evidence/outcome.txt
+          if test -f guarded-evidence/worker.pid; then
+            ps -p "$(cat guarded-evidence/worker.pid)" -o pid=,args= >> guarded-evidence/outcome.txt || true
+          fi
+
+      - name: Upload evidence on PASS FAIL and INCONCLUSIVE
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eventflow-guarded-green-03b-evidence
+          path: guarded-evidence/
+          if-no-files-found: error
+
+      - name: Enforce evidence result
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.classifier.outputs.classifier_exit || '2' }}" = '0'
