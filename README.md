@@ -1,4 +1,14 @@
-# Python Pipeline Acceptance — controlled v0.2.1 experiment
+# Reprovant — Python worker failure-acceptance experiments
+
+> **Research case study — not a commercial product, automatic validator, or production certification.** `reprovant` is a proposed repository/brand name; the existing installed distribution and `pipeline_acceptance` Python imports are unchanged.
+
+**Verified external results (2026-11-01):** baseline [02A](https://github.com/Kaan081/python-pipeline-acceptance/actions/runs/41316392717) used **ordinary pytest** and disposable PostgreSQL on an educational ETL application (**4/4 PASS**). Eventflow [03A](https://github.com/Kaan081/python-pipeline-acceptance/actions/runs/41318068548) showed a state regression and duplicate event on **manual task re-enqueue** through a real Celery worker; Eventflow [03B](https://github.com/Kaan081/python-pipeline-acceptance/actions/runs/41319161073) showed a narrow guarded GREEN using standard Django ORM behavior. **None of these proves automated issue discovery, production redelivery after ACK loss, a paid customer, or an advantage over AI + pytest.**
+
+Read the [external evidence case study](docs/REPROVANT_EVIDENCE_CASE_STUDY.md) and the [mandatory public release gate](docs/PUBLIC_RELEASE_GATE.md) before changing visibility.
+
+---
+
+## Archived v0.2.1 synthetic experiment and local usage
 
 > **Status: Technical experiment, NOT a product, customer-validated solution, subscription, production repair, or certification.**
 
@@ -81,7 +91,7 @@ docker compose down
 unset PIPELINE_TEST_DSN PIPELINE_DB_PASSWORD
 ```
 
-**If a command fails**, first tear down the disposable container and remove the two environment variables; avoid `docker compose config` in shared logs because it can reveal interpolated secrets. The database uses temporary storage only. This still **does not prove** production safety. The PostgreSQL tests have not been executed by the assistant in this environment.
+**If a command fails**, first tear down the disposable container and remove the two environment variables; avoid `docker compose config` in shared logs because it can reveal interpolated secrets. The database uses temporary storage only. This still **does not prove** production safety. PostgreSQL CI jobs and external test workflows have been reported by the repository owner as successful; this archived local quick start is not evidence of production acceptance.
 
 ## Artifact details / what proof means
 
