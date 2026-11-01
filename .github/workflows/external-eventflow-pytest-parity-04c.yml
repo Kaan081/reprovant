@@ -1,0 +1,189 @@
+name: External Eventflow 04C pytest vs Reprovant (manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compare-worker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [upstream, guarded]
+        method: [pytest, reprovant]
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: ppa_eventflow_worker_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-eventflow-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ppa_eventflow_worker_ci"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      POSTGRES_DB: ppa_eventflow_worker_ci
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: disposable-eventflow-only
+      REDIS_URL: redis://127.0.0.1:6379/14
+      DJANGO_SECRET_KEY: disposable-eventflow-04c
+      DJANGO_DEBUG: 'False'
+      DJANGO_SETTINGS_MODULE: config.settings
+      CELERY_TASK_ALWAYS_EAGER: 'False'
+      EVENTFLOW_PROBE_DISPOSABLE: 'YES'
+      EXPECTED_EVENTFLOW_SHA: c08455d626d5e1c316d932c4da0652086fb1b19e
+      EVENTFLOW_04C_SNAPSHOT: evidence-04c/snapshot.json
+    steps:
+      - name: Checkout our experiment
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Checkout pinned Eventflow
+        uses: actions/checkout@v4
+        with:
+          repository: juneja-varun/eventflow
+          ref: c08455d626d5e1c316d932c4da0652086fb1b19e
+          path: upstream-eventflow
+          persist-credentials: false
+      - name: Verify pinned source and apply guarded patch only when selected
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p evidence-04c
+          test "$(git -C upstream-eventflow rev-parse HEAD)" = "$EXPECTED_EVENTFLOW_SHA"
+          test -z "$(git -C upstream-eventflow status --porcelain)"
+          if [ '${{ matrix.mode }}' = 'guarded' ]; then
+            cp experiments/eventflow_guarded/tasks_guarded.py upstream-eventflow/orders/tasks.py
+            python -m py_compile upstream-eventflow/orders/tasks.py
+          fi
+          git -C upstream-eventflow diff --check
+          git -C upstream-eventflow diff --name-only > evidence-04c/changed_files.txt
+          if [ '${{ matrix.mode }}' = 'guarded' ]; then
+            test "$(cat evidence-04c/changed_files.txt)" = 'orders/tasks.py'
+          else
+            test ! -s evidence-04c/changed_files.txt
+          fi
+          sha256sum upstream-eventflow/orders/tasks.py > evidence-04c/source.sha256
+          printf 'method=%s\nmode=%s\nupstream_sha=%s\nmanual_second_enqueue=yes\n' \
+            '${{ matrix.method }}' '${{ matrix.mode }}' "$EXPECTED_EVENTFLOW_SHA" > evidence-04c/provenance.txt
+      - name: Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install matching dependencies
+        run: |
+          python -m pip install -r upstream-eventflow/requirements-dev.txt
+          python -m pip install -e '.[test]'
+      - name: Migrate isolated PostgreSQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream-eventflow
+          python manage.py migrate --noinput
+      - name: Start independent Celery worker
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd upstream-eventflow
+          nohup celery -A config worker --pool=solo --concurrency=1 --loglevel=INFO </dev/null > ../evidence-04c/worker.log 2>&1 &
+          echo "$!" > ../evidence-04c/worker.pid
+      - name: Run selected acceptance method
+        id: acceptance
+        shell: bash
+        run: |
+          set +e
+          export PYTHONPATH="$GITHUB_WORKSPACE/upstream-eventflow"
+          if [ '${{ matrix.method }}' = 'pytest' ]; then
+            python -m pytest -q experiments/eventflow_pytest_baseline/test_live.py \
+              --junitxml=evidence-04c/junit.xml > evidence-04c/pytest.log 2>&1
+            pytest_code=$?
+            printf 'pytest_exit=%s\n' "$pytest_code" > evidence-04c/test-exit.txt
+            python experiments/eventflow_pytest_baseline/classify.py \
+              --mode '${{ matrix.mode }}' \
+              --pytest-exit "$pytest_code" \
+              --junit evidence-04c/junit.xml \
+              --snapshot evidence-04c/snapshot.json \
+              --changed-files evidence-04c/changed_files.txt \
+              --output evidence-04c/report.json
+            code=$?
+          else
+            python experiments/eventflow_replay_contract/run_contract.py \
+              --mode '${{ matrix.mode }}' \
+              --changed-files evidence-04c/changed_files.txt \
+              --output evidence-04c/report.json
+            code=$?
+          fi
+          echo "exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+      - name: Capture worker and exit state
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p evidence-04c
+          printf 'method=%s\nmode=%s\nacceptance_exit=%s\n' \
+            '${{ matrix.method }}' '${{ matrix.mode }}' \
+            '${{ steps.acceptance.outputs.exit || 'NOT_RUN' }}' > evidence-04c/outcome.txt
+          if test -f evidence-04c/worker.pid; then
+            ps -p "$(cat evidence-04c/worker.pid)" -o pid=,args= >> evidence-04c/outcome.txt || true
+          fi
+      - name: Upload evidence, including inconclusive
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eventflow-04c-${{ matrix.method }}-${{ matrix.mode }}
+          path: evidence-04c/
+          if-no-files-found: error
+      - name: Fail closed on unexpected outcome
+        if: always()
+        shell: bash
+        run: |
+          test '${{ steps.acceptance.outputs.exit || '2' }}' = '0'
+
+  summarize:
+    runs-on: ubuntu-latest
+    needs: compare-worker
+    if: always()
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Fetch four independent evidence archives
+        uses: actions/download-artifact@v4
+        with:
+          pattern: eventflow-04c-*
+          path: comparison-evidence
+      - name: Independently enforce parity
+        shell: bash
+        run: |
+          set -euo pipefail
+          python experiments/eventflow_pytest_baseline/compare.py \
+            --evidence-dir comparison-evidence \
+            --output comparison-result.json
+      - name: Upload parity verdict
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eventflow-04c-parity-verdict
+          path: comparison-result.json
+          if-no-files-found: warn
