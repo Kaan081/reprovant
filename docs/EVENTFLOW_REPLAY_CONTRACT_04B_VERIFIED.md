@@ -1,9 +1,9 @@
 # Reprovant 04B — Verified External Worker Evidence
 
-**Verified date:** 2026-11-01  
-**GitHub Actions run:** https://github.com/Kaan081/reprovant/actions/runs/41331192111  
-**Reprovant run commit:** `6ff1a7e416ce9b458138f645d7a34e4934c3a795`  
-**Pinned external Eventflow revision:** `c08455d626d5e1c316d932c4da0652086fb1b19e`  
+**Verified date:** 2026-11-01
+**GitHub Actions run:** https://github.com/Kaan081/reprovant/actions/runs/41331192111
+**Reprovant run commit:** `6ff1a7e416ce9b458138f645d7a34e4934c3a795`
+**Pinned external Eventflow revision:** `c08455d626d5e1c316d932c4da0652086fb1b19e`
 **Source:** `juneja-varun/eventflow` (educational example)
 
 ## Results verified from the two uploaded GitHub Actions artifacts
@@ -22,7 +22,7 @@
 | Independent non-eager Celery worker attested | Yes | Yes |
 | Upstream modified files | None | `orders/tasks.py` |
 
-**Upstream artifact:** `eventflow-replay-contract-04b-upstream`, ID `13093611459`  
+**Upstream artifact:** `eventflow-replay-contract-04b-upstream`, ID `13093611459`
 **Guarded artifact:** `eventflow-replay-contract-04b-guarded`, ID `13093565849`
 
 Both jobs ran with separate disposable PostgreSQL 16 + Redis 7 services and an actual Celery worker. Both artifacts contain `report.json`, worker logs, source hash, source change list, and provenance.
