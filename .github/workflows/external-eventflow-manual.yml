@@ -1,0 +1,105 @@
+name: External Eventflow Acceptance (manual experiment)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  external-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: eventflow
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: disposable-ci-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d eventflow"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: '5432'
+      POSTGRES_DB: eventflow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: disposable-ci-only
+      DJANGO_SECRET_KEY: ci-disposable-external-experiment
+      DJANGO_DEBUG: 'False'
+      DJANGO_SETTINGS_MODULE: config.settings
+      EXPECTED_UPSTREAM_SHA: c08455d626d5e1c316d932c4da0652086fb1b19e
+    steps:
+      - name: Checkout acceptance contracts
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Checkout pinned upstream public project
+        uses: actions/checkout@v4
+        with:
+          repository: juneja-varun/eventflow
+          ref: c08455d626d5e1c316d932c4da0652086fb1b19e
+          path: upstream-eventflow
+          persist-credentials: false
+
+      - name: Verify pinned upstream revision
+        shell: bash
+        run: |
+          test "$(git -C upstream-eventflow rev-parse HEAD)" = "$EXPECTED_UPSTREAM_SHA"
+          echo "UPSTREAM_SHA=$(git -C upstream-eventflow rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install upstream test dependencies
+        run: python -m pip install -r upstream-eventflow/requirements-dev.txt
+
+      - name: Run acceptance contract against unmodified upstream
+        id: acceptance
+        shell: bash
+        run: |
+          set +e
+          cd upstream-eventflow
+          python -m pytest -q -c setup.cfg \
+            "$GITHUB_WORKSPACE/experiments/eventflow/test_contract.py" \
+            --junitxml="$GITHUB_WORKSPACE/external-evidence/junit.xml"
+          code=$?
+          echo "pytest_exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Classify result without false PASS
+        id: result
+        shell: bash
+        if: always()
+        run: |
+          set +e
+          python experiments/eventflow/collect_evidence.py \
+            --junit external-evidence/junit.xml \
+            --pytest-exit "${{ steps.acceptance.outputs.pytest_exit || '2' }}" \
+            --upstream-sha "${UPSTREAM_SHA:-unknown}" \
+            --output external-evidence/report.json
+          code=$?
+          echo "status_exit=$code" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      - name: Upload external evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: external-eventflow-acceptance-evidence
+          path: external-evidence/
+          if-no-files-found: error
+
+      - name: Enforce result
+        if: always()
+        shell: bash
+        run: |
+          test "${{ steps.result.outputs.status_exit || '2' }}" = '0'
