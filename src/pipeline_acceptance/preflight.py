@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import socket
 
+from sqlalchemy.engine.url import make_url
+
 from .storage import validate_local_test_dsn
 
 
@@ -34,7 +36,18 @@ def require_postgres_ready(dsn: str) -> None:
             "Missing psycopg driver. Run: python -m pip install -e '.[test,postgres]'"
         ) from None
     try:
-        with psycopg.connect(dsn, connect_timeout=3, options="-c statement_timeout=3000") as conn:
+        # `postgresql+psycopg://` is SQLAlchemy-specific; libpq/psycopg cannot
+        # parse that URL scheme directly. Use the already-validated components.
+        url = make_url(dsn)
+        with psycopg.connect(
+            host=url.host,
+            port=url.port,
+            dbname=url.database,
+            user=url.username,
+            password=url.password,
+            connect_timeout=3,
+            options="-c statement_timeout=3000",
+        ) as conn:
             with conn.cursor() as cursor:
                 cursor.execute("SELECT 1")
     except (psycopg.Error, OSError):

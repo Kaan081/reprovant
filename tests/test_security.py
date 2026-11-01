@@ -50,7 +50,9 @@ def test_sql_parameter_binding_with_hostile_job_identifier(engine):
     job = "x'); DROP TABLE jobs; --"
     seed_job(engine, job)
     assert get_status(engine, job) == "PENDING"
-    assert "jobs" in inspect(engine).get_table_names()
+    # Inspector ignores schema_translate_map; explicitly inspect the isolated PG schema.
+    schema = engine.get_execution_options().get("schema_translate_map", {}).get(None)
+    assert "jobs" in inspect(engine).get_table_names(schema=schema)
 
 
 def test_cli_never_accepts_dsn_in_argument():
