@@ -39,6 +39,6 @@ SOFTWARE.
 
 The external ETL repository `timur-rimsky/api-airflow-postgres-etl-pipeline` and the full Eventflow repository are **not vendored** in the tracked source tree. Workflows download pinned upstream revisions into disposable test environments. This statement does not grant rights to redistribute upstream projects; check their own license terms separately.
 
-## Repository-wide license
+## Reprovant license and upstream rights
 
-This notice is **not** a repository-wide license grant for original Reprovant code. A separate `LICENSE` decision is needed if the owner intends to allow general reuse or contributions.
+The root [Apache-2.0 LICENSE](../LICENSE) applies to original/author-owned Reprovant material. It does **not** erase the separate MIT copyright notice and permission terms above for the Eventflow-derived sample. Retain those notices when redistributing copies or substantial portions of that sample.

@@ -4,9 +4,9 @@
 
 **Verified external results (2026-11-01):** baseline [02A](https://github.com/Kaan081/reprovant/actions/runs/41316392717) used **ordinary pytest** and disposable PostgreSQL on an educational ETL application (**4/4 PASS**). Eventflow [03A](https://github.com/Kaan081/reprovant/actions/runs/41318068548) showed a state regression and duplicate event on **manual task re-enqueue** through a real Celery worker; Eventflow [03B](https://github.com/Kaan081/reprovant/actions/runs/41319161073) showed a narrow guarded GREEN using standard Django ORM behavior. **None of these proves automated issue discovery, production redelivery after ACK loss, a paid customer, or an advantage over AI + pytest.**
 
-Read the [external evidence case study](docs/REPROVANT_EVIDENCE_CASE_STUDY.md), [third-party attribution and license notice](docs/THIRD_PARTY_NOTICES.md), and [mandatory public release gate](docs/PUBLIC_RELEASE_GATE.md) before changing visibility.
+Read the [external evidence case study](docs/REPROVANT_EVIDENCE_CASE_STUDY.md), [third-party attribution and license notice](docs/THIRD_PARTY_NOTICES.md), and [publication audit checklist](docs/PUBLIC_RELEASE_GATE.md) for outstanding release checks.
 
-**License status:** There is no repository-wide open-source license for the author-owned code at this stage; public visibility alone is not a general reuse grant. The Eventflow-derived sample in `experiments/eventflow_guarded/tasks_guarded.py` carries the upstream MIT license obligations documented in the third-party notice. This is a public evidence portfolio, not an assertion of exclusive ownership over that sample.
+**License:** Original/author-owned Reprovant materials are available under [Apache License 2.0](LICENSE). The Eventflow-derived example in `experiments/eventflow_guarded/tasks_guarded.py` retains its upstream **MIT** attribution and license terms; see [third-party notices](docs/THIRD_PARTY_NOTICES.md). This is a research portfolio and not a production-safety certification or a claim of ownership over upstream code.
 
 ---
 
