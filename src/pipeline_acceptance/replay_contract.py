@@ -88,6 +88,8 @@ def evaluate_replay(adapter: ReplayAdapter, contract: ReplayContract) -> dict:
 
     is_disposable is an explicit adapter *assertion*, not independently verified.
     Any dispatch/observer exception becomes INCONCLUSIVE, with type only reported.
+    Dispatch completion is not proof that a broker delivered or a worker
+    executed the task; that evidence is outside this v0 snapshot contract.
     Does not catch BaseException (e.g. KeyboardInterrupt/SystemExit).
     """
     started = time.perf_counter()
@@ -96,11 +98,12 @@ def evaluate_replay(adapter: ReplayAdapter, contract: ReplayContract) -> dict:
         "schema_version": SCHEMA,
         "contract": contract.name,
         "status": "INCONCLUSIVE",
-        "scope": "one replay in adapter-attested disposable environment; not production or broker ACK-loss proof",
+        "scope": "one replay in adapter-attested disposable environment; no verified worker execution, production or broker ACK-loss proof",
         "checks": {},
         "before": None,
         "after": None,
         "dispatch_completed": False,
+        "worker_execution_verified": False,  # No worker receipt in the v0 contract.
     }
     phase = "safety_check"
     try:

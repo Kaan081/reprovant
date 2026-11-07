@@ -23,31 +23,49 @@ def _insert_effect_on_conflict_do_nothing(engine: Engine, *, job_id: str, logica
 
 
 def process_once(engine: Engine, job_id: str, logical_key: str, payload: str, *, crash_after_commit: bool = False) -> None:
-    """Idempotent replay of same job/logical effect; commit happens before simulated ACK.
+    """Replay the exact effect of a job; never backfill a terminal job.
 
-    If logical_key was previously written with conflicting content, fail closed.
-    Job state must already exist. Status update only moves nonterminal states to success.
+    State transition is conditional and happens *before* the effect insert, in
+    the same transaction. PostgreSQL serializes competing writers on the job
+    row. A SUCCEEDED job may only replay its already committed matching effect.
     """
     from sqlalchemy import select
 
     if not logical_key.strip():
         raise ValueError("Logical idempotency key cannot be empty")
+    if not job_id or len(job_id) > 80:
+        raise ValueError("Job id must be between 1 and 80 characters")
+    if len(logical_key) > 80:
+        raise ValueError("Logical idempotency key exceeds 80 characters")
+    if len(payload) > 500:
+        raise ValueError("Effect payload exceeds 500 characters")
+
     with engine.begin() as conn:
-        conn.execute(_insert_effect_on_conflict_do_nothing(engine, job_id=job_id, logical_key=logical_key, payload=payload))
-        stored = conn.execute(
-            select(effects.c.job_id, effects.c.payload).where(effects.c.logical_key == logical_key)
-        ).one_or_none()
-        if stored is None or (stored.job_id, stored.payload) != (job_id, payload):
-            raise ValueError("Idempotency-key collision with different job, key or payload")
-        conn.execute(
+        transitioned = conn.execute(
             update(jobs)
             .where(jobs.c.job_id == job_id, jobs.c.status.in_(["PENDING", "RUNNING", "RETRY"]))
             .values(status="SUCCEEDED")
         )
-        # A missing or FAILED job cannot be silently accepted. Replays of SUCCEEDED are allowed.
-        state = conn.execute(select(jobs.c.status).where(jobs.c.job_id == job_id)).scalar_one_or_none()
-        if state != "SUCCEEDED":
-            raise ValueError("Cannot mark missing/failed job as succeeded")
+        if transitioned.rowcount == 1:
+            # Valid first execution: effect and success state commit atomically.
+            conn.execute(_insert_effect_on_conflict_do_nothing(
+                engine, job_id=job_id, logical_key=logical_key, payload=payload
+            ))
+        else:
+            # A replay of SUCCEEDED may validate existing evidence, but never
+            # manufacture an effect missing from a supposedly completed job.
+            state = conn.execute(
+                select(jobs.c.status).where(jobs.c.job_id == job_id)
+            ).scalar_one_or_none()
+            if state != "SUCCEEDED":
+                raise ValueError("Cannot mark missing/failed job as succeeded")
+
+        stored = conn.execute(
+            select(effects.c.job_id, effects.c.payload).where(effects.c.logical_key == logical_key)
+        ).one_or_none()
+        if stored is None or (stored.job_id, stored.payload) != (job_id, payload):
+            raise ValueError("Idempotency-key collision or terminal job has no matching effect")
+
     if crash_after_commit:
         raise AckLostAfterCommit("Simulated crash after COMMIT, before ACK")
 

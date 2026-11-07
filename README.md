@@ -37,7 +37,7 @@ python -m pytest -q
 python -m pipeline_acceptance.demo --output proof-report.json
 ```
 
-The test suite includes the original 8 SQLite behavior tests, one PostgreSQL-only concurrency test (skipped unless explicitly enabled), and security regression tests. Counts can change; trust the actual test output. By default the tests will **never connect to PostgreSQL** even if a DSN is present in your environment; for PostgreSQL tests set `PIPELINE_TEST_DSN`.
+The test suite includes the original 8 SQLite behavior tests, one PostgreSQL-only concurrency test (skipped unless explicitly enabled), and security regression tests. Counts can change; trust the actual test output. By default, the tests use SQLite **when `PIPELINE_TEST_DSN` is unset**. Setting `PIPELINE_TEST_DSN` explicitly opts the entire pytest session into disposable PostgreSQL (including the startup preflight). Unlike `demo.py`, pytest uses this environment variable directly.
 
 To see pre-fix bugs as **three expected failing tests**:
 
@@ -105,7 +105,7 @@ unset PIPELINE_TEST_DSN PIPELINE_DB_PASSWORD
 - `src/pipeline_acceptance/demo.py`: comparable before/after scenarios; emits JSON with backend, observed values, and evidence scope.
 - `compose.yaml`: ephemeral PostgreSQL database; nothing deployed into an existing application.
 
-**Limitations:** Synthetic job and dataset model, simplified ACK simulation, no real queue transport, no external side-effect compensation, no crash during COMMIT, no distributed transaction, no multi-tenant/production integration, no real customer data, no performance benchmark. Logical idempotency keys must come from domain rules. Key conflicts fail closed. Validation is a synthetic caller-provided flag, NOT a real dataset validator. Race behavior needs genuine PostgreSQL run. External non-database effects are out of scope.
+**Limitations:** Replay-contract GREEN verifies only before/after state and effect counts; `dispatch_completed` does not prove broker delivery or worker execution (`worker_execution_verified` stays false in v0). Synthetic job and dataset model, simplified ACK simulation, no real queue transport, no external side-effect compensation, no crash during COMMIT, no distributed transaction, no multi-tenant/production integration, no real customer data, no performance benchmark. Logical idempotency keys must come from domain rules. Key conflicts fail closed. Validation is a synthetic caller-provided flag, NOT a real dataset validator. Race behavior needs genuine PostgreSQL run. External non-database effects are out of scope.
 
 ## Business gate (still HOLD)
 

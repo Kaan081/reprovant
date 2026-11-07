@@ -23,7 +23,7 @@ from sqlalchemy.engine import Engine, URL
 from .guarded import process_once
 from .legacy import process_with_bug
 from .preflight import TestDatabaseUnavailable, require_postgres_ready
-from .storage import effects, get_effect_count, get_status, isolated_engine, jobs, legacy_effects, seed_job, validate_local_test_dsn
+from .storage import effects, enable_sqlite_foreign_keys, get_effect_count, get_status, isolated_engine, jobs, legacy_effects, seed_job, validate_local_test_dsn
 
 _SCHEMA_RE = re.compile(r"acceptance_[0-9a-f]{24}\Z")
 _CHECKPOINT_TIMEOUT = 12.0
@@ -39,7 +39,9 @@ def _worker_engine() -> Engine:
         db = os.environ.get("PIPELINE_CRASH_SQLITE_PATH")
         if not db or not Path(db).is_absolute() or not Path(db).is_file():
             raise RuntimeError("Worker requires an existing disposable SQLite database")
-        return create_engine(URL.create("sqlite+pysqlite", database=db), hide_parameters=True)
+        engine = create_engine(URL.create("sqlite+pysqlite", database=db), hide_parameters=True)
+        enable_sqlite_foreign_keys(engine)
+        return engine
     if backend == "postgresql":
         dsn = os.environ.get("PIPELINE_TEST_DSN", "")
         validate_local_test_dsn(dsn)
@@ -145,9 +147,13 @@ def _kill_at_checkpoint(engine: Engine, stage: str, job_id: str, logical_key: st
                         raise RuntimeError("Unexpected successful worker exit")
                     return result
                 if proc.poll() is not None:
-                    raise RuntimeError("Worker exited before crash checkpoint; test inconclusive")
+                    # The exit code is safe to disclose; child stdout/stderr and
+                    # connection credentials remain suppressed.
+                    raise RuntimeError(
+                        f"Worker exited before {stage} checkpoint (exit code {proc.returncode}); test inconclusive"
+                    )
                 time.sleep(0.025)
-            raise RuntimeError("Worker never reached crash checkpoint; test inconclusive")
+            raise RuntimeError(f"Worker never reached {stage} checkpoint (timeout); test inconclusive")
         finally:
             if proc.poll() is None:
                 proc.kill()
