@@ -19,6 +19,7 @@ from sqlalchemy import (
     String,
     Table,
     create_engine,
+    event,
     insert,
     select,
     text,
@@ -34,6 +35,7 @@ jobs = Table(
     Column("job_id", String(80), primary_key=True),
     Column("status", String(12), nullable=False),
     CheckConstraint("status IN ('PENDING','RUNNING','RETRY','SUCCEEDED','FAILED')", name="job_state_allowed"),
+    CheckConstraint("length(job_id) <= 80", name="job_id_length_allowed"),
 )
 
 # Intentionally broken legacy table: each replay creates another durable business effect.
@@ -42,6 +44,9 @@ legacy_effects = Table(
     Column("event_id", String(40), primary_key=True),
     Column("logical_key", String(80), nullable=False),
     Column("payload", String(500), nullable=False),
+    CheckConstraint("length(event_id) <= 40", name="legacy_event_id_length_allowed"),
+    CheckConstraint("length(logical_key) <= 80", name="legacy_key_length_allowed"),
+    CheckConstraint("length(payload) <= 500", name="legacy_payload_length_allowed"),
 )
 
 # Corrected table: business deduplication must be a database-level invariant.
@@ -50,6 +55,9 @@ effects = Table(
     Column("logical_key", String(80), primary_key=True),
     Column("job_id", String(80), ForeignKey("jobs.job_id"), nullable=False, unique=True),
     Column("payload", String(500), nullable=False),
+    CheckConstraint("length(logical_key) <= 80", name="effect_key_length_allowed"),
+    CheckConstraint("length(job_id) <= 80", name="effect_job_id_length_allowed"),
+    CheckConstraint("length(payload) <= 500", name="effect_payload_length_allowed"),
 )
 
 datasets = Table(
@@ -57,6 +65,8 @@ datasets = Table(
     Column("slot", String(80), primary_key=True),
     Column("value", String(500), nullable=False),
     Column("revision", Integer, nullable=False, default=1),
+    CheckConstraint("length(slot) <= 80", name="dataset_slot_length_allowed"),
+    CheckConstraint("length(value) <= 500", name="dataset_value_length_allowed"),
 )
 
 
@@ -115,6 +125,20 @@ def validate_local_test_dsn(dsn: str) -> None:
         )
 
 
+def enable_sqlite_foreign_keys(engine: Engine) -> None:
+    """Keep SQLite's FK behavior aligned with the PostgreSQL experiment."""
+    if engine.dialect.name != "sqlite":
+        raise ValueError("SQLite engine required")
+
+    @event.listens_for(engine, "connect")
+    def _foreign_keys_on(dbapi_connection, _connection_record) -> None:
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+        finally:
+            cursor.close()
+
+
 @contextmanager
 def isolated_engine(dsn: str | None = None, sqlite_path: Path | None = None) -> Iterator[Engine]:
     """Create and remove *only* a random namespace on a disposable loopback database.
@@ -151,6 +175,7 @@ def isolated_engine(dsn: str | None = None, sqlite_path: Path | None = None) -> 
     else:
         url = "sqlite+pysqlite:///:memory:" if sqlite_path is None else f"sqlite+pysqlite:///{sqlite_path.as_posix()}"
         engine = create_engine(url, future=True, hide_parameters=True)
+        enable_sqlite_foreign_keys(engine)
         try:
             metadata.create_all(engine)
             yield engine
