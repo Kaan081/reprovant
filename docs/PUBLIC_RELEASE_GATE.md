@@ -4,7 +4,7 @@
 
 ### Verified snapshot — narrow scope
 
-- Security pinning PR [#20](https://github.com/Kaan081/reprovant/pull/20) merged at `4044db2`; its post-merge main CI [run](https://github.com/Kaan081/reprovant/actions/runs/41404612533) succeeded.
+- Security pinning PR [#20](https://github.com/kaanbartubozkurt/reprovant/pull/20) merged at `4044db2`; its post-merge main CI [run](https://github.com/kaanbartubozkurt/reprovant/actions/runs/41404612533) succeeded.
 - Owner-run local `gitleaks 8.30.1 git . --log-opts="--all" --redact` found zero findings over 21 reachable commits (~291 KB) on 2026-11-02. This is **not** a review of GitHub Actions logs/artifacts, other clones, unreachable commits, or every possible secret.
 - This licensing change is a proposal until its PR is merged: original/author-owned code under Apache-2.0; preserve modified Eventflow MIT notice separately.
 - Branch protection was not enabled in the last checked repository settings; check current rules and audit other historical disclosures before any wider claims.
@@ -27,7 +27,7 @@
 ## Original pre-publication release plan (historical; steps already occurred)
 
 1. Land docs-only case-study PR while repo is still private; run existing CI. Commit only the files intentionally selected, **never** `git add -A` from a working tree with artifacts.
-2. Rename repo with `gh repo rename reprovant -R Kaan081/python-pipeline-acceptance`, then `git remote set-url origin https://github.com/Kaan081/reprovant.git`.
+2. Rename repo with `gh repo rename reprovant -R Kaan081/python-pipeline-acceptance`, then `git remote set-url origin https://github.com/kaanbartubozkurt/reprovant.git`.
 3. Confirm redirected historical evidence links and check the CI workflows after rename. GitHub redirects most repo links but has exceptions for published Actions and GitHub Pages.
 4. Re-run privacy review. **Only then**, if approved, change to public in GitHub Settings → Danger Zone → Change visibility. This is a deliberate visibility/security decision, not an automatic next step.
 5. Verify public README and permissions externally; public repository is a case study, not a product launch.

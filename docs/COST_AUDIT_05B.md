@@ -8,9 +8,9 @@
 
 | Experiment | Real CI run | Artifact verdict | Scope |
 | --- | --- | --- | --- |
-| 04B Eventflow, Reprovant | [41331192111](https://github.com/Kaan081/reprovant/actions/runs/41331192111) | upstream RED, guarded GREEN | Real non-eager Celery/Redis/PostgreSQL; manual duplicate dispatch |
-| 04C Eventflow, both methods | [41336778411](https://github.com/Kaan081/reprovant/actions/runs/41336778411) | `VERIFIED_PARITY` | Same original/guarded scenario; pytest equals Reprovant on observed invariants |
-| 05A Flask, both methods | [41338574356](https://github.com/Kaan081/reprovant/actions/runs/41338574356) | `VERIFIED_SECOND_APP_PARITY` | Both detect `success/attempts=1` -> `success/attempts=2` |
+| 04B Eventflow, Reprovant | [41331192111](https://github.com/kaanbartubozkurt/reprovant/actions/runs/41331192111) | upstream RED, guarded GREEN | Real non-eager Celery/Redis/PostgreSQL; manual duplicate dispatch |
+| 04C Eventflow, both methods | [41336778411](https://github.com/kaanbartubozkurt/reprovant/actions/runs/41336778411) | `VERIFIED_PARITY` | Same original/guarded scenario; pytest equals Reprovant on observed invariants |
+| 05A Flask, both methods | [41338574356](https://github.com/kaanbartubozkurt/reprovant/actions/runs/41338574356) | `VERIFIED_SECOND_APP_PARITY` | Both detect `success/attempts=1` -> `success/attempts=2` |
 
 The 05A result is not proof of a duplicate external effect. `perform_job()` is a demo operation. No natural broker redelivery, ACK-loss or customer production behavior was tested.
 
