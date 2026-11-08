@@ -79,7 +79,7 @@ jobs:
           printf 'upstream_sha=%s\nmode=manual_second_dispatch\nsource_patch=test_only_disposable_checkout\noriginal_03a_run=41318068548\n' "$EXPECTED_EVENTFLOW_SHA" > guarded-evidence/provenance.txt
 
       - name: Python 3.12
-        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: '3.12'
 
