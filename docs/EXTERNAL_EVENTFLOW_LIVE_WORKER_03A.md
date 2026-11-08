@@ -20,10 +20,10 @@ The previous Eventflow Django tests called the task function directly. The upstr
 **Important:** Two deliberate `.apply_async()` calls create *different* Celery task IDs. This is NOT automatic Redis redelivery, a process kill, a post-commit crash, or ACK loss. The upstream Celery task uses default acknowledgement settings; real ACK-loss behavior requires a separate explicitly designed experiment. A Redis pubsub message does not establish durable exactly-once notification delivery.
 
 ## Execution
-Apply the sibling patch in the root of your `Kaan081/python-pipeline-acceptance` repo, check diff, commit to a feature branch and verify manual workflow visibility on `main`. Then run via:
+Apply the sibling patch in the root of your `kaanbartubozkurt/reprovant` repo, check diff, commit to a feature branch and verify manual workflow visibility on `main`. Then run via:
 
 ```powershell
-gh workflow run external-eventflow-live-worker-manual.yml --repo Kaan081/python-pipeline-acceptance --ref main
+gh workflow run external-eventflow-live-worker-manual.yml --repo kaanbartubozkurt/reprovant --ref main
 ```
 
 Download the resulting artifact using its run ID and inspect `report.json`, `outcome.txt`, and `worker.log`. If the job fails at worker readiness, Redis subscription, migration or dependency installation, report `INCONCLUSIVE`; do not claim an upstream regression without a passing positive control.

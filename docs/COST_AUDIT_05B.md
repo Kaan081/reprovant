@@ -1,7 +1,7 @@
 # Reprovant 05B — source-cost inventory and product gate
 
 **Date:** 2026-11-01
-**Source examined:** `Kaan081/reprovant`, `main` at `de26f1a5cede95f53dae0cc3a87d5196696aad6d`
+**Source examined:** `kaanbartubozkurt/reprovant`, `main` at `de26f1a5cede95f53dae0cc3a87d5196696aad6d`
 **Status:** source-size audit completed; human labor costs and commercial advantage **NOT MEASURED**.
 
 ## Verified technical outcomes (separate from this source audit)

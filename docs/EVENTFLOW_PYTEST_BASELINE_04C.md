@@ -20,10 +20,10 @@ The manual `.github/workflows/external-eventflow-pytest-parity-04c.yml` runs **f
 ## How to run (only after merge)
 
 ```powershell
-gh workflow run external-eventflow-pytest-parity-04c.yml --repo Kaan081/reprovant --ref main
-gh run list --repo Kaan081/reprovant --workflow external-eventflow-pytest-parity-04c.yml --limit 3
+gh workflow run external-eventflow-pytest-parity-04c.yml --repo kaanbartubozkurt/reprovant --ref main
+gh run list --repo kaanbartubozkurt/reprovant --workflow external-eventflow-pytest-parity-04c.yml --limit 3
 # After identifying the NEW run ID:
-gh run watch <run-id> --repo Kaan081/reprovant --exit-status
+gh run watch <run-id> --repo kaanbartubozkurt/reprovant --exit-status
 ```
 
 Expected four verdicts: `VERIFIED_PYTEST_RED`, `VERIFIED_PYTEST_GREEN`, `VERIFIED_RED_CONTROL`, `VERIFIED_GUARDED_GREEN`; summary: `VERIFIED_PARITY`.

@@ -28,10 +28,10 @@ The adapter reuses existing 03A pinned revision, worker ping, Redis event collec
 ## Commands (only AFTER merging the PR containing the workflow)
 
 ```powershell
-gh workflow run external-eventflow-replay-contract-04b.yml --repo Kaan081/reprovant --ref main
-gh run list --repo Kaan081/reprovant --workflow external-eventflow-replay-contract-04b.yml --limit 3
+gh workflow run external-eventflow-replay-contract-04b.yml --repo kaanbartubozkurt/reprovant --ref main
+gh run list --repo kaanbartubozkurt/reprovant --workflow external-eventflow-replay-contract-04b.yml --limit 3
 # Use the actual NEW 04B run ID, then:
-gh run watch <run-id> --repo Kaan081/reprovant --exit-status
+gh run watch <run-id> --repo kaanbartubozkurt/reprovant --exit-status
 ```
 
 Do not claim 04B success without both job results and their separately uploaded `eventflow-replay-contract-04b-upstream` and `eventflow-replay-contract-04b-guarded` evidence artifacts. If either is inconclusive, report that limitation; do not greenwash an earlier 03A/03B success.

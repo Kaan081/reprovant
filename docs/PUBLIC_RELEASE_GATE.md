@@ -27,7 +27,7 @@
 ## Original pre-publication release plan (historical; steps already occurred)
 
 1. Land docs-only case-study PR while repo is still private; run existing CI. Commit only the files intentionally selected, **never** `git add -A` from a working tree with artifacts.
-2. Rename repo with `gh repo rename reprovant -R Kaan081/python-pipeline-acceptance`, then `git remote set-url origin https://github.com/kaanbartubozkurt/reprovant.git`.
+2. Rename the repository from `python-pipeline-acceptance` to `reprovant`, then set the canonical remote with `git remote set-url origin https://github.com/kaanbartubozkurt/reprovant.git`.
 3. Confirm redirected historical evidence links and check the CI workflows after rename. GitHub redirects most repo links but has exceptions for published Actions and GitHub Pages.
 4. Re-run privacy review. **Only then**, if approved, change to public in GitHub Settings → Danger Zone → Change visibility. This is a deliberate visibility/security decision, not an automatic next step.
 5. Verify public README and permissions externally; public repository is a case study, not a product launch.
