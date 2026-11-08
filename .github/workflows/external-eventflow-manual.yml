@@ -46,12 +46,12 @@ jobs:
       EXPECTED_UPSTREAM_SHA: c08455d626d5e1c316d932c4da0652086fb1b19e
     steps:
       - name: Checkout acceptance contracts
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
       - name: Checkout pinned upstream public project
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: juneja-varun/eventflow
           ref: c08455d626d5e1c316d932c4da0652086fb1b19e
